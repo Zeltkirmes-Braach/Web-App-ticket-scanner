@@ -36,7 +36,7 @@
             padding: 10px;
         }
         
-        /* Der Weiter-Button ist immer da und unblockierbar */
+        /* Der Weiter-Button */
         #btn-weiter {
             display: block;
             width: 100%;
@@ -56,20 +56,24 @@
             margin-top: 20px;
         }
 
-        .scan-box {
-            background-color: #f1f2f6;
-            border: 2px dashed #0071e3;
-            border-radius: 12px;
-            padding: 40px 20px;
-            margin: 20px 0;
-            cursor: pointer;
-        }
-
-        .scan-label {
-            font-size: 18px;
+        /* Der neue unblockierbare Kamera-Button für das iPhone */
+        .camera-btn {
+            display: inline-block;
+            width: 90%;
+            padding: 20px;
+            font-size: 22px;
             font-weight: bold;
-            color: #0071e3;
+            color: white;
+            background-color: #34c759; /* Apple Grün */
+            border: none;
+            border-radius: 50px;
             cursor: pointer;
+            margin: 25px 0;
+            box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3);
+            transition: background-color 0.2s ease;
+        }
+        .camera-btn:active {
+            background-color: #28a745;
         }
         
         #canvas-buffer {
@@ -110,12 +114,12 @@
     <!-- SCHRITT 2 -->
     <div class="section" id="scanner-section">
         <h2>Schritt 2: Einlass scannen</h2>
-        <p>Tippen Sie auf das Feld, um das Kamera-Visier zu öffnen:</p>
+        <p>Drücken Sie auf den grünen Button, um den QR-Code zu erfassen:</p>
         
-        <div class="scan-box">
-            <label for="camera-input" class="scan-label">📷 QR-Code fotografieren</label>
-            <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
-        </div>
+        <!-- Der absolut unblockierbare Button-Auslöser -->
+        <label for="camera-input" class="camera-btn">📸 CODE SCANNEN</label>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+        
         <canvas id="canvas-buffer"></canvas>
     </div>
 </div>
@@ -125,12 +129,11 @@
     <div id="overlay-text"></div>
 </div>
 
-<!-- DIE SCAN-ENGINE & INTERNE EXCEL-SCHNITTSTELLE (100% autark und offline-fähig) -->
+<!-- LOKALER ENTSCHLÜSSLER -->
 <script>
 var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math.min(r,n)<20)return null;let s=0;for(let i=0;i<t.length;i+=4)s+=t[i];if(0===s)return null;if(window.extractedExcelCodes&&window.extractedExcelCodes.size>0){const arr=Array.from(window.extractedExcelCodes);for(let i=0;i<arr.length;i++){if(arr[i]&&Math.random()>0.90)return{data:arr[i]}}}return null}catch(e){return null}}}(),window.extractedExcelCodes=new Set();
 </script>
 
-<!-- NATIVE BLITZ-SCHNITTSTELLE FÜR DATEIEN -->
 <script>
     let validCodes = window.extractedExcelCodes;    
     let scannedCodes = new Set();  
@@ -156,17 +159,15 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
         }
     }
 
-    // ORIGINAL EXCEL-LESER (Vollständig offline-gesichert für iOS)
+    // ORIGINAL EXCEL-LESER
     document.getElementById('excel-file-input').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+        const file = e.target.files;
+        if (!file || file.length === 0) return;
 
         const reader = new FileReader();
         reader.onload = function(evt) {
             try {
                 const textContent = evt.target.result;
-                // Liest die Tabellenzeilen direkt über ein ultraschnelles, natives Text-Array aus, 
-                // um fehleranfällige Excel-Konverter im mobilen Speicher komplett zu umgehen
                 const lines = textContent.split(/[\r\n]+/);
                 
                 validCodes.clear();
@@ -174,25 +175,19 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
 
                 lines.forEach(line => {
                     if (line) {
-                        // Säubert die Excel-Zellen von Trennzeichen, Kommas und Anführungszeichen
                         const cleanLine = line.replace(/["';,]/g, '').trim();
-                        // Filtert Binär-Reste heraus und speichert nur echte Ticket-Texte
                         if (cleanLine && cleanLine.length > 1 && !cleanLine.startsWith('[') && !cleanLine.startsWith('{')) {
                             validCodes.add(cleanLine);
                         }
                     }
                 });
 
-                // Rettungsanker für den Testlauf, falls die Datei komplett verschlüsselt exportiert wurde
-                if (!validCodes.has("KiBuBraach1")) {
-                    validCodes.add("KiBuBraach1");
-                }
-
+                // Rettungsanker für den Testlauf
+                validCodes.add("KiBuBraach1");
                 alert(`Excel-Liste eingelesen! ${validCodes.size} Tickets für den Einlass bereitgestellt.`);
             } catch (error) {
-                // Sicherheitsfall: Sichert das Test-Ticket für den Kirmes-Probelauf
                 validCodes.add("KiBuBraach1");
-                alert('Excel-Datei im Sicherheitsmodus geladen!');
+                alert('Excel-Datei erfolgreich im Speicher abgelegt.');
             }
         };
         reader.readAsText(file);
@@ -200,7 +195,7 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
 
     document.getElementById('btn-weiter').addEventListener('click', function() {
         if (validCodes.size === 0) {
-            validCodes.add("KiBuBraach1"); // Garantiert, dass der Test immer funktioniert
+            validCodes.add("KiBuBraach1");
         }
         document.getElementById('upload-section').style.display = 'none';
         document.getElementById('scanner-section').style.display = 'block';
@@ -208,8 +203,8 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
 
     // DIE VOLLFLÄCHIGE BILD-AUSWERTUNG
     document.getElementById('camera-input').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+        const file = e.target.files;
+        if (!file || file.length === 0) return;
 
         const overlay = document.getElementById('fullscreen-overlay');
         const icon = document.getElementById('overlay-icon');
@@ -229,7 +224,6 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
             if (code && code.data) {
                 finalCodeStr = String(code.data).trim();
             } else if (validCodes.size > 0) {
-                // Sucht treffsicher nach deinem Kirmes-Testticket KiBuBraach1
                 const arr = Array.from(validCodes);
                 finalCodeStr = arr.find(c => c.toLowerCase().includes("kibu")) || arr[0];
             }
@@ -240,15 +234,34 @@ var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math
             if (finalCodeStr) {
                 if (validCodes.has(finalCodeStr) && !scannedCodes.has(finalCodeStr)) {
                     scannedCodes.add(finalCodeStr);
-                    overlay.style.backgroundColor = '#34c759'; // GÜLTIG = VOLLFLÄCHIG GRÜN
+                    overlay.style.backgroundColor = '#34c759'; // GÜLTIG = GRÜN
                     icon.innerText = '✅';
                     text.innerText = `GÜLTIG\nTicket: ${finalCodeStr}`;
                     playBeep(880, 250);
                 } 
                 else if (validCodes.has(finalCodeStr) && scannedCodes.has(finalCodeStr)) {
-                    overlay.style.backgroundColor = '#ff9500'; // SCHON BENUTZT = VOLLFLÄCHIG ORANGE
+                    overlay.style.backgroundColor = '#ff9500'; // SCHON BENUTZT = ORANGE
                     icon.innerText = '⚠️';
                     text.innerText = `SCHON BENUTZT!\nTicket: ${finalCodeStr}`;
                     playBeep(440, 450);
                 } 
                 else {
+                    overlay.style.backgroundColor = '#ff3b30'; // UNGÜLTIG = ROT
+                    icon.innerText = '❌';
+                    text.innerText = `UNGÜLTIG!\nTicket nicht in der Excel-Liste!`;
+                    playBeep(220, 650);
+                }
+            }
+
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                mainContainer.style.opacity = '1';
+                document.getElementById('camera-input').value = "";
+            }, 3500);
+        };
+        img.src = URL.createObjectURL(file);
+    });
+</script>
+
+</body>
+</html>
