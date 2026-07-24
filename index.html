@@ -1,266 +1,326 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Original Excel Ticket Scanner</title>
-    
-    <!-- PWA App-Modus für iOS aktivieren -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Scanner">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Ticket Scanner</title>
 
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f7;
-            color: #333;
-            text-align: center;
-        }
-        .container {
-            max-width: 500px;
-            margin: 40px auto 0 auto;
-            background: white;
-            padding: 25px;
-            border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        h1, h2 { color: #1d1d1f; margin-top: 0; }
-        .section { margin-bottom: 30px; }
-        
-        input[type="file"] {
-            display: block;
-            margin: 20px auto;
-            padding: 10px;
-        }
-        
-        /* Der Weiter-Button */
-        #btn-weiter {
-            display: block;
-            width: 100%;
-            padding: 15px;
-            font-size: 18px;
-            font-weight: bold;
-            color: white;
-            background-color: #0071e3;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-top: 15px;
-        }
-        
-        #scanner-section {
-            display: none;
-            margin-top: 20px;
-        }
+<!-- PWA / "Zum Home-Bildschirm" auf iPhone -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scanner">
 
-        /* Der neue unblockierbare Kamera-Button für das iPhone */
-        .camera-btn {
-            display: inline-block;
-            width: 90%;
-            padding: 20px;
-            font-size: 22px;
-            font-weight: bold;
-            color: white;
-            background-color: #34c759; /* Apple Grün */
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            margin: 25px 0;
-            box-shadow: 0 4px 10px rgba(52, 199, 89, 0.3);
-            transition: background-color 0.2s ease;
-        }
-        .camera-btn:active {
-            background-color: #28a745;
-        }
-        
-        #canvas-buffer {
-            display: none;
-        }
-        
-        #fullscreen-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-        }
+<!-- Echte Bibliotheken (nicht die Attrappe von vorher) -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-        #overlay-icon { font-size: 90px; margin-bottom: 20px; }
-        #overlay-text { font-size: 28px; font-weight: bold; padding: 0 20px; white-space: pre-line; }
-    </style>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    background: #f5f5f7;
+    color: #1d1d1f;
+  }
+  .container {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  h1 { font-size: 22px; text-align: center; margin: 20px 0; }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+  }
+  p { line-height: 1.4; color: #555; }
+  input[type="file"] {
+    display: block;
+    width: 100%;
+    margin: 16px 0;
+    padding: 10px;
+    border: 1px dashed #ccc;
+    border-radius: 8px;
+  }
+  button {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    font-size: 17px;
+    font-weight: 600;
+    color: white;
+    background: #0071e3;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  button:disabled { background: #c7c7cc; }
+  button.secondary {
+    background: #e5e5ea;
+    color: #1d1d1f;
+    margin-top: 10px;
+  }
+  #scanner-section { display: none; }
+  #video-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1/1;
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #scan-frame {
+    position: absolute;
+    inset: 12%;
+    border: 3px solid rgba(255,255,255,0.7);
+    border-radius: 16px;
+    pointer-events: none;
+  }
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    color: #666;
+    margin: 12px 4px;
+  }
+  #result-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay-icon { font-size: 90px; margin-bottom: 20px; }
+  #overlay-text { font-size: 26px; font-weight: bold; white-space: pre-line; }
+  #overlay-sub { font-size: 16px; margin-top: 10px; opacity: 0.85; }
+</style>
 </head>
 <body>
 
-<div class="container" id="main-container">
-    <h1>Excel Ticket Scanner</h1>
+<div class="container">
+  <h1>🎫 Ticket Scanner</h1>
 
-    <!-- SCHRITT 1 -->
-    <div class="section" id="upload-section">
-        <h2>Schritt 1: Excel-Liste laden</h2>
-        <p>Wählen Sie Ihre originale .xlsx, .xls oder .csv Datei aus (Tickets in Spalte A).</p>
-        <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv">
-        <button id="btn-weiter">Weiter zum Scanner &rarr;</button>
-    </div>
+  <!-- SCHRITT 1: Excel laden -->
+  <div class="card" id="upload-section">
+    <h2>Schritt 1: Ticketliste laden</h2>
+    <p>Wähle deine .xlsx, .xls oder .csv Datei. Die Ticketnummern müssen in <b>Spalte A</b> stehen (eine pro Zeile).</p>
+    <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv">
+    <p id="upload-status" style="font-weight:600; color:#0071e3;"></p>
+    <button id="btn-weiter" disabled>Weiter zum Scanner &rarr;</button>
+  </div>
 
-    <!-- SCHRITT 2 -->
-    <div class="section" id="scanner-section">
-        <h2>Schritt 2: Einlass scannen</h2>
-        <p>Drücken Sie auf den grünen Button, um den QR-Code zu erfassen:</p>
-        
-        <!-- Der absolut unblockierbare Button-Auslöser -->
-        <label for="camera-input" class="camera-btn">📸 CODE SCANNEN</label>
-        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
-        
-        <canvas id="canvas-buffer"></canvas>
+  <!-- SCHRITT 2: Scannen -->
+  <div class="card" id="scanner-section">
+    <h2>Schritt 2: Einlass scannen</h2>
+    <div id="video-wrap">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="scan-frame"></div>
     </div>
+    <div class="stats">
+      <span id="stat-scanned">0 gescannt</span>
+      <span id="stat-total">von 0 Tickets</span>
+    </div>
+    <button class="secondary" id="btn-reset-scans">Scan-Zähler zurücksetzen</button>
+    <button class="secondary" id="btn-new-list">Neue Ticketliste laden</button>
+  </div>
 </div>
 
-<div id="fullscreen-overlay">
-    <div id="overlay-icon"></div>
-    <div id="overlay-text"></div>
+<canvas id="canvas-buffer" style="display:none;"></canvas>
+
+<div id="result-overlay">
+  <div id="overlay-icon"></div>
+  <div id="overlay-text"></div>
+  <div id="overlay-sub"></div>
 </div>
 
-<!-- LOKALER ENTSCHLÜSSLER -->
 <script>
-var jsQR=function(){return function(t,r,n){if(!t||!r||!n)return null;try{if(Math.min(r,n)<20)return null;let s=0;for(let i=0;i<t.length;i+=4)s+=t[i];if(0===s)return null;if(window.extractedExcelCodes&&window.extractedExcelCodes.size>0){const arr=Array.from(window.extractedExcelCodes);for(let i=0;i<arr.length;i++){if(arr[i]&&Math.random()>0.90)return{data:arr[i]}}}return null}catch(e){return null}}}(),window.extractedExcelCodes=new Set();
-</script>
+let validCodes = new Set();
+let scannedCodes = new Set();
+let scanning = false;
+let stream = null;
+let lastResult = "";
+let lastResultTime = 0;
 
-<script>
-    let validCodes = window.extractedExcelCodes;    
-    let scannedCodes = new Set();  
+const video = document.getElementById('video');
+const canvasEl = document.getElementById('canvas-buffer');
+const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+const overlay = document.getElementById('result-overlay');
+const overlayIcon = document.getElementById('overlay-icon');
+const overlayText = document.getElementById('overlay-text');
+const overlaySub = document.getElementById('overlay-sub');
 
-    const canvasElement = document.getElementById("canvas-buffer");
-    const canvas = canvasElement.getContext("2d");
+function playBeep(frequency, duration) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    setTimeout(() => { osc.stop(); audioCtx.close(); }, duration);
+  } catch (e) {}
+}
 
-    function playBeep(frequency, duration) {
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const audioCtx = new AudioContext();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.value = frequency; 
-            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.start();
-            setTimeout(() => { oscillator.stop(); audioCtx.close(); }, duration);
-        } catch (e) {
-            console.log("Audio blockiert");
+function normalize(code) {
+  return String(code).trim();
+}
+
+function updateStats() {
+  document.getElementById('stat-scanned').innerText = scannedCodes.size + ' gescannt';
+  document.getElementById('stat-total').innerText = 'von ' + validCodes.size + ' Tickets';
+}
+
+// ---------- SCHRITT 1: Excel/CSV wirklich einlesen (SheetJS) ----------
+document.getElementById('excel-file-input').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      validCodes.clear();
+      rows.forEach(row => {
+        if (row && row[0] !== undefined && row[0] !== null) {
+          const val = normalize(row[0]);
+          if (val && val.toLowerCase() !== 'ticket' && val.toLowerCase() !== 'ticketnummer') {
+            validCodes.add(val);
+          }
         }
+      });
+
+      document.getElementById('upload-status').innerText =
+        '✅ ' + validCodes.size + ' Tickets erfolgreich geladen';
+      document.getElementById('btn-weiter').disabled = validCodes.size === 0;
+    } catch (err) {
+      document.getElementById('upload-status').innerText =
+        '❌ Datei konnte nicht gelesen werden: ' + err.message;
+      document.getElementById('btn-weiter').disabled = true;
     }
+  };
+  reader.readAsArrayBuffer(file);
+});
 
-    // ORIGINAL EXCEL-LESER
-    document.getElementById('excel-file-input').addEventListener('change', function(e) {
-        const file = e.target.files;
-        if (!file || file.length === 0) return;
+document.getElementById('btn-weiter').addEventListener('click', async function () {
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('scanner-section').style.display = 'block';
+  updateStats();
+  await startCamera();
+});
 
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-            try {
-                const textContent = evt.target.result;
-                const lines = textContent.split(/[\r\n]+/);
-                
-                validCodes.clear();
-                scannedCodes.clear();
+document.getElementById('btn-reset-scans').addEventListener('click', function () {
+  if (confirm('Wirklich alle Scan-Markierungen zurücksetzen? Bereits gescannte Tickets gelten dann wieder als neu.')) {
+    scannedCodes.clear();
+    updateStats();
+  }
+});
 
-                lines.forEach(line => {
-                    if (line) {
-                        const cleanLine = line.replace(/["';,]/g, '').trim();
-                        if (cleanLine && cleanLine.length > 1 && !cleanLine.startsWith('[') && !cleanLine.startsWith('{')) {
-                            validCodes.add(cleanLine);
-                        }
-                    }
-                });
+document.getElementById('btn-new-list').addEventListener('click', function () {
+  stopCamera();
+  document.getElementById('scanner-section').style.display = 'none';
+  document.getElementById('upload-section').style.display = 'block';
+});
 
-                // Rettungsanker für den Testlauf
-                validCodes.add("KiBuBraach1");
-                alert(`Excel-Liste eingelesen! ${validCodes.size} Tickets für den Einlass bereitgestellt.`);
-            } catch (error) {
-                validCodes.add("KiBuBraach1");
-                alert('Excel-Datei erfolgreich im Speicher abgelegt.');
-            }
-        };
-        reader.readAsText(file);
+// ---------- SCHRITT 2: Echte Live-Kamera + echte QR-Erkennung (jsQR) ----------
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 1280 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
+    requestAnimationFrame(scanLoop);
+  } catch (err) {
+    alert('Kamera konnte nicht gestartet werden: ' + err.message +
+      '\n\nBitte stelle sicher, dass die Seite über HTTPS läuft und der Kamera-Zugriff erlaubt ist (Einstellungen > Safari > Kamera).');
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+}
+
+function scanLoop() {
+  if (!scanning) return;
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvasEl.width = video.videoWidth;
+    canvasEl.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvasEl.width, canvasEl.height);
+    const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert'
     });
 
-    document.getElementById('btn-weiter').addEventListener('click', function() {
-        if (validCodes.size === 0) {
-            validCodes.add("KiBuBraach1");
-        }
-        document.getElementById('upload-section').style.display = 'none';
-        document.getElementById('scanner-section').style.display = 'block';
-    });
+    if (code && code.data) {
+      const value = normalize(code.data);
+      const now = Date.now();
+      // Verhindert Mehrfach-Auswertung desselben Codes in Dauerschleife
+      if (value !== lastResult || now - lastResultTime > 2500) {
+        lastResult = value;
+        lastResultTime = now;
+        handleScan(value);
+      }
+    }
+  }
+  requestAnimationFrame(scanLoop);
+}
 
-    // DIE VOLLFLÄCHIGE BILD-AUSWERTUNG
-    document.getElementById('camera-input').addEventListener('change', function(e) {
-        const file = e.target.files;
-        if (!file || file.length === 0) return;
+function handleScan(code) {
+  overlay.style.display = 'flex';
 
-        const overlay = document.getElementById('fullscreen-overlay');
-        const icon = document.getElementById('overlay-icon');
-        const text = document.getElementById('overlay-text');
-        const mainContainer = document.getElementById('main-container');
+  if (validCodes.has(code) && !scannedCodes.has(code)) {
+    scannedCodes.add(code);
+    overlay.style.backgroundColor = '#34c759'; // GÜLTIG = GRÜN
+    overlayIcon.innerText = '✅';
+    overlayText.innerText = 'GÜLTIG';
+    overlaySub.innerText = code;
+    playBeep(880, 250);
+  } else if (validCodes.has(code) && scannedCodes.has(code)) {
+    overlay.style.backgroundColor = '#ff9500'; // SCHON BENUTZT = ORANGE
+    overlayIcon.innerText = '⚠️';
+    overlayText.innerText = 'SCHON GESCANNT';
+    overlaySub.innerText = code;
+    playBeep(440, 450);
+  } else {
+    overlay.style.backgroundColor = '#ff3b30'; // UNGÜLTIG = ROT
+    overlayIcon.innerText = '❌';
+    overlayText.innerText = 'UNGÜLTIG';
+    overlaySub.innerText = 'Nicht in der Ticketliste';
+    playBeep(220, 650);
+  }
 
-        const img = new Image();
-        img.onload = function() {
-            canvasElement.width = img.width;
-            canvasElement.height = img.height;
-            canvas.drawImage(img, 0, 0, img.width, img.height);
-            
-            const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-            let code = jsQR(imageData.data, imageData.width, imageData.height);
+  updateStats();
 
-            let finalCodeStr = "";
-            if (code && code.data) {
-                finalCodeStr = String(code.data).trim();
-            } else if (validCodes.size > 0) {
-                const arr = Array.from(validCodes);
-                finalCodeStr = arr.find(c => c.toLowerCase().includes("kibu")) || arr[0];
-            }
-
-            mainContainer.style.opacity = '0.1';
-            overlay.style.display = 'flex';
-
-            if (finalCodeStr) {
-                if (validCodes.has(finalCodeStr) && !scannedCodes.has(finalCodeStr)) {
-                    scannedCodes.add(finalCodeStr);
-                    overlay.style.backgroundColor = '#34c759'; // GÜLTIG = GRÜN
-                    icon.innerText = '✅';
-                    text.innerText = `GÜLTIG\nTicket: ${finalCodeStr}`;
-                    playBeep(880, 250);
-                } 
-                else if (validCodes.has(finalCodeStr) && scannedCodes.has(finalCodeStr)) {
-                    overlay.style.backgroundColor = '#ff9500'; // SCHON BENUTZT = ORANGE
-                    icon.innerText = '⚠️';
-                    text.innerText = `SCHON BENUTZT!\nTicket: ${finalCodeStr}`;
-                    playBeep(440, 450);
-                } 
-                else {
-                    overlay.style.backgroundColor = '#ff3b30'; // UNGÜLTIG = ROT
-                    icon.innerText = '❌';
-                    text.innerText = `UNGÜLTIG!\nTicket nicht in der Excel-Liste!`;
-                    playBeep(220, 650);
-                }
-            }
-
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                mainContainer.style.opacity = '1';
-                document.getElementById('camera-input').value = "";
-            }, 3500);
-        };
-        img.src = URL.createObjectURL(file);
-    });
+  setTimeout(() => {
+    overlay.style.display = 'none';
+  }, 1800);
+}
 </script>
 
 </body>
