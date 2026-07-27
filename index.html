@@ -187,6 +187,39 @@ function updateStats() {
   document.getElementById('stat-total').innerText = 'von ' + validCodes.size + ' Tickets';
 }
 
+// ---------- Speichern & Wiederherstellen (überlebt Display-Sperre / App-Neustart) ----------
+const STORAGE_KEY = 'ticketScannerState';
+
+function saveState() {
+  try {
+    const data = {
+      validCodes: Array.from(validCodes),
+      scannedCodes: Array.from(scannedCodes.entries()).map(([code, date]) => [code, date.toISOString()])
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // localStorage evtl. voll oder blockiert - ignorieren, Scanner funktioniert trotzdem weiter
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.validCodes || data.validCodes.length === 0) return false;
+    validCodes = new Set(data.validCodes);
+    scannedCodes = new Map((data.scannedCodes || []).map(([code, iso]) => [code, new Date(iso)]));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clearState() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+}
+
 // ---------- SCHRITT 1: Excel/CSV wirklich einlesen (SheetJS) ----------
 document.getElementById('excel-file-input').addEventListener('change', function (e) {
   const file = e.target.files[0];
@@ -213,6 +246,8 @@ document.getElementById('excel-file-input').addEventListener('change', function 
       document.getElementById('upload-status').innerText =
         '✅ ' + validCodes.size + ' Tickets erfolgreich geladen';
       document.getElementById('btn-weiter').disabled = validCodes.size === 0;
+      scannedCodes.clear();
+      saveState();
     } catch (err) {
       document.getElementById('upload-status').innerText =
         '❌ Datei konnte nicht gelesen werden: ' + err.message;
@@ -233,6 +268,7 @@ document.getElementById('btn-reset-scans').addEventListener('click', function ()
   if (confirm('Wirklich alle Scan-Markierungen zurücksetzen? Bereits gescannte Tickets gelten dann wieder als neu.')) {
     scannedCodes.clear();
     updateStats();
+    saveState();
   }
 });
 
@@ -297,7 +333,14 @@ async function exportResults() {
 }
 
 document.getElementById('btn-new-list').addEventListener('click', function () {
+  if (!confirm('Neue Liste laden? Die aktuelle Ticketliste und alle Scan-Ergebnisse werden dabei gelöscht.')) return;
   stopCamera();
+  validCodes.clear();
+  scannedCodes.clear();
+  clearState();
+  document.getElementById('upload-status').innerText = '';
+  document.getElementById('btn-weiter').disabled = true;
+  document.getElementById('excel-file-input').value = '';
   document.getElementById('scanner-section').style.display = 'none';
   document.getElementById('upload-section').style.display = 'block';
 });
@@ -377,11 +420,46 @@ function handleScan(code) {
   }
 
   updateStats();
+  saveState();
 
   setTimeout(() => {
     overlay.style.display = 'none';
   }, 1800);
 }
+
+// ---------- Beim Start: gespeicherte Liste + Ergebnisse wiederherstellen ----------
+window.addEventListener('DOMContentLoaded', function () {
+  if (loadState()) {
+    document.getElementById('upload-section').style.display = 'none';
+    document.getElementById('scanner-section').style.display = 'block';
+    updateStats();
+    startCamera();
+  }
+});
+
+// ---------- Kamera nach Display-Sperre / App im Hintergrund automatisch neu starten ----------
+document.addEventListener('visibilitychange', function () {
+  const scannerVisible = document.getElementById('scanner-section').style.display === 'block';
+  if (!scannerVisible) return;
+
+  if (document.visibilityState === 'hidden') {
+    // Kamera anhalten, wenn die App in den Hintergrund geht / Display gesperrt wird
+    stopCamera();
+  } else if (document.visibilityState === 'visible') {
+    // Beim Zurückkehren die Kamera neu starten - Liste & Ergebnisse bleiben erhalten
+    if (!scanning) {
+      startCamera();
+    }
+  }
+});
+
+// Zusätzliches Sicherheitsnetz für iOS: pageshow feuert auch bei Wiederherstellung aus dem Cache
+window.addEventListener('pageshow', function () {
+  const scannerVisible = document.getElementById('scanner-section').style.display === 'block';
+  if (scannerVisible && !scanning) {
+    startCamera();
+  }
+});
 </script>
 
 </body>
