@@ -132,6 +132,7 @@
       <span id="stat-scanned">0 gescannt</span>
       <span id="stat-total">von 0 Tickets</span>
     </div>
+    <button id="btn-export">📤 Ergebnisse exportieren</button>
     <button class="secondary" id="btn-reset-scans">Scan-Zähler zurücksetzen</button>
     <button class="secondary" id="btn-new-list">Neue Ticketliste laden</button>
   </div>
@@ -147,7 +148,7 @@
 
 <script>
 let validCodes = new Set();
-let scannedCodes = new Set();
+let scannedCodes = new Map(); // code -> Zeitstempel
 let scanning = false;
 let stream = null;
 let lastResult = "";
@@ -235,6 +236,66 @@ document.getElementById('btn-reset-scans').addEventListener('click', function ()
   }
 });
 
+document.getElementById('btn-export').addEventListener('click', async function () {
+  await exportResults();
+});
+
+async function exportResults() {
+  // Eine Zeile pro Ticket aus der Original-Liste: Status + Zeitstempel (falls gescannt)
+  const rows = [];
+  validCodes.forEach(code => {
+    const scannedAt = scannedCodes.get(code);
+    rows.push({
+      'Ticketnummer': code,
+      'Status': scannedAt ? 'Gescannt' : 'Nicht gescannt',
+      'Zeitstempel': scannedAt ? scannedAt.toLocaleString('de-DE') : ''
+    });
+  });
+
+  // Sortierung: gescannte zuerst, nach Zeit
+  rows.sort((a, b) => {
+    if (a.Status === b.Status) return 0;
+    return a.Status === 'Gescannt' ? -1 : 1;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 20 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Scan-Ergebnisse');
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = 'Scan-Ergebnisse_' + dateStr + '.xlsx';
+
+  // Als Blob erzeugen (funktioniert zuverlässiger als writeFile im Standalone-PWA-Modus)
+  const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const file = new File([blob], filename, { type: blob.type });
+
+  // Auf dem iPhone: liebster Weg ist "Teilen" (Speichern in Dateien, Mail, AirDrop etc.)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'Scan-Ergebnisse',
+      });
+      return;
+    } catch (err) {
+      // Nutzer hat Teilen abgebrochen -> kein Fehler, einfach nichts tun
+      if (err.name === 'AbortError') return;
+    }
+  }
+
+  // Fallback: normaler Download-Link
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 document.getElementById('btn-new-list').addEventListener('click', function () {
   stopCamera();
   document.getElementById('scanner-section').style.display = 'none';
@@ -295,7 +356,7 @@ function handleScan(code) {
   overlay.style.display = 'flex';
 
   if (validCodes.has(code) && !scannedCodes.has(code)) {
-    scannedCodes.add(code);
+    scannedCodes.set(code, new Date());
     overlay.style.backgroundColor = '#34c759'; // GÜLTIG = GRÜN
     overlayIcon.innerText = '✅';
     overlayText.innerText = 'GÜLTIG';
