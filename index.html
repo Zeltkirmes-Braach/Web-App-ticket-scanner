@@ -150,6 +150,7 @@
 let validCodes = new Set();
 let scannedCodes = new Map(); // code -> Zeitstempel
 let scanning = false;
+let cameraStarting = false;
 let stream = null;
 let lastResult = "";
 let lastResultTime = 0;
@@ -347,17 +348,31 @@ document.getElementById('btn-new-list').addEventListener('click', function () {
 
 // ---------- SCHRITT 2: Echte Live-Kamera + echte QR-Erkennung (jsQR) ----------
 async function startCamera() {
+  // Verhindert, dass mehrere gleichzeitige getUserMedia-Aufrufe sich gegenseitig abbrechen
+  // (das war die Ursache für "The operation was aborted")
+  if (cameraStarting || scanning) return;
+  cameraStarting = true;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 1280 } }
     });
+    if (document.visibilityState === 'hidden') {
+      // App ist während des Kamerastarts in den Hintergrund gegangen - Stream direkt wieder stoppen
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      return;
+    }
     video.srcObject = stream;
     await video.play();
     scanning = true;
     requestAnimationFrame(scanLoop);
   } catch (err) {
-    alert('Kamera konnte nicht gestartet werden: ' + err.message +
-      '\n\nBitte stelle sicher, dass die Seite über HTTPS läuft und der Kamera-Zugriff erlaubt ist (Einstellungen > Safari > Kamera).');
+    if (err.name !== 'AbortError') {
+      alert('Kamera konnte nicht gestartet werden: ' + err.message +
+        '\n\nBitte stelle sicher, dass die Seite über HTTPS läuft und der Kamera-Zugriff erlaubt ist (Einstellungen > Safari > Kamera).');
+    }
+  } finally {
+    cameraStarting = false;
   }
 }
 
